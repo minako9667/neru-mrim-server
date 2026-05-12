@@ -126,11 +126,15 @@ async function processNewMicroblog (
   connectionId,
   logger,
   state,
-  variables
+  variables,
+  httpPost = null,
+  httpFlags
 ) {
-  if (await _checkIfLoggedIn(containerHeader, logger, connectionId, state) === 0) return
+  if(httpPost === null && await _checkIfLoggedIn(containerHeader, logger, connectionId, state) === 0) return
 
-  const microblog = MrimChangeMicroblogStatus.reader(packetData, state.utf16capable)
+  const microblog = httpPost !== null
+	? {flags: (httpFlags || 0x09), text: httpPost}
+	: MrimChangeMicroblogStatus.reader(packetData, state.utf16capable)
 
   let innerID = 0xFFFFFFFFFFFFFF
 
@@ -178,6 +182,8 @@ async function processNewMicroblog (
   }, true)
 
   const contacts = await getContactsFromGroups(state.userId)
+  
+    const baseHeader = containerHeader || { magic: 0xDEADBEEF, proto: 0x00010014, seq: 1403 }; //TODO КОСТЫЛЬ КОСТЫЛЬ
 
   for (const contact of contacts) {
     const client = global.clients.find(

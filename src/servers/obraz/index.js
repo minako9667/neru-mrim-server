@@ -6,10 +6,11 @@
 // eslint-disable-next-line no-unused-vars
 const { Socket, createServer } = require('node:net')
 const { processAvatar } = require('./processor')
-const { getUserAvatar } = require('../../database')
+const { getUserAvatar, getUserIdViaCredentials } = require('../../database')
 const config = require('../../../config')
 const { query } = require('winston')
 const { generateXMLResponse } = require('./weather')
+const { processNewMicroblog } = require('../mrim/processors/status.js')
 const { ServerConstructor } = require('../../constructors/server')
 
 const ALLOWED_METHODS = ['GET', 'HEAD']
@@ -158,6 +159,57 @@ function connectionListener (socket, connectionId, logger, variables) {
           </Body>
           </BalanceResponse>
           `, { 'Content-Type': 'text/xml'})
+      }
+	  
+	  /* microblog */
+      if (uripath === 'data/agentupload') {
+        const login = queryValues['a'] ? decodeURIComponent(queryValues['a']) : '';
+		const password = queryValues['b'] ? decodeURIComponent(queryValues['b']) : '';
+        let text = queryValues['e'] ? decodeURIComponent(queryValues['e'].replace(/\+/g, '%20')) : '';
+		const unoff = queryValues['f'] ? decodeURIComponent(queryValues['f']) : '';
+        let flags = (unoff === 'music') ? 0x02 : 0x09;
+		
+        const [username, domain] = login.split('@');
+		const connectionId = `http`; // а как иначе ало
+		let client = null
+		
+		try {
+		  const dbUserId = await getUserIdViaCredentials(username, domain, password);
+		} catch (err) {
+		    console.log(`[obraz] auth for ${login} failed: invalid login/password`);
+			return respond(version, 200, '<response><status>401</status></response>', { 'Content-Type': 'text/xml' });
+          }
+		  
+		try {
+		  client = global.clients?.find(
+			(c) => c.username?.toLowerCase() === username.toLowerCase() && 
+                   c.domain?.toLowerCase() === domain.toLowerCase()
+        );
+	   } catch (err) {
+          console.log(`[obraz] internal error, stack: ${err.stack}`);
+          return respond(version, 200, '<response><status>500</status></response>', { 'Content-Type': 'text/xml' });
+        }
+		  
+        if (!client) {
+          // if not online - 401 
+          return respond(version, 200, '<response><status>401</status></response>', { 'Content-Type': 'text/xml' }); 
+        }
+        
+		if (text.length > 500) {
+           console.log(`[obraz] rejected microblog post from ${login}: text exceeds 500 characters`);
+           return respond(version, 200, '<response><status>418</status></response>', { 'Content-Type': 'text/xml' });
+        }
+		
+		if (unoff === 'nomusic') { text = ''; flags = 0x02; }
+		
+        try {
+          await processNewMicroblog( null, null, connectionId, console, client, null, text, flags );
+          return respond(version, 200, '<response><status>200</status></response>', { 'Content-Type': 'text/xml' });
+          
+        } catch (err) {
+          console.log(`[obraz] internal error, stack: ${err.stack}`);
+          return respond(version, 200, '<response><status>500</status></response>', { 'Content-Type': 'text/xml' });
+        } // mail.ru really didn't want to use normal http codes, so, they used 200 OK, and the real code was wrapped in xml
       }
 
       // processing pfp by default
