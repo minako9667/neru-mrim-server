@@ -176,7 +176,7 @@ function connectionListener (socket, connectionId, logger, variables) {
 		try {
 		  const dbUserId = await getUserIdViaCredentials(username, domain, password);
 		} catch (err) {
-		    console.log(`[obraz] auth for ${login} failed: invalid login/password`);
+		    logger.debug(`[obraz] auth for ${login} failed: invalid login/password`);
 			return respond(version, 200, '<response><status>401</status></response>', { 'Content-Type': 'text/xml' });
           }
 		  
@@ -186,7 +186,7 @@ function connectionListener (socket, connectionId, logger, variables) {
                    c.domain?.toLowerCase() === domain.toLowerCase()
         );
 	   } catch (err) {
-          console.log(`[obraz] internal error, stack: ${err.stack}`);
+          logger.error(`[obraz] internal error, stack: ${err.stack}`);
           return respond(version, 200, '<response><status>500</status></response>', { 'Content-Type': 'text/xml' });
         }
 		  
@@ -196,7 +196,7 @@ function connectionListener (socket, connectionId, logger, variables) {
         }
         
 		if (text.length > 500) {
-           console.log(`[obraz] rejected microblog post from ${login}: text exceeds 500 characters`);
+           logger.debug(`[obraz] rejected microblog post from ${login}: text exceeds 500 characters`);
            return respond(version, 200, '<response><status>418</status></response>', { 'Content-Type': 'text/xml' });
         }
 		
@@ -207,7 +207,7 @@ function connectionListener (socket, connectionId, logger, variables) {
           return respond(version, 200, '<response><status>200</status></response>', { 'Content-Type': 'text/xml' });
           
         } catch (err) {
-          console.log(`[obraz] internal error, stack: ${err.stack}`);
+          logger.error(`[obraz] internal error, stack: ${err.stack}`);
           return respond(version, 200, '<response><status>500</status></response>', { 'Content-Type': 'text/xml' });
         } // mail.ru really didn't want to use normal http codes, so, they used 200 OK, and the real code was wrapped in xml
       }
