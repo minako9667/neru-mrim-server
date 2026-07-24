@@ -211,7 +211,7 @@ async function searchUsers (userId, searchParameters, searchMyself = false, limi
   }
 
   if (
-    Object.hasOwn(searchParameters, 'zodiac') && 
+    Object.hasOwn(searchParameters, 'zodiac') &&
     !Number.isNaN(Number(searchParameters.zodiac))
   ) {
     query += '`user`.`zodiac` = ? AND '
@@ -219,7 +219,7 @@ async function searchUsers (userId, searchParameters, searchMyself = false, limi
   }
 
   if (
-    Object.hasOwn(searchParameters, 'birthmonth') && 
+    Object.hasOwn(searchParameters, 'birthmonth') &&
     !Number.isNaN(Number(searchParameters.birthmonth))
   ) {
     query += 'MONTH(`user`.`birthday`) = ? AND '
@@ -227,7 +227,7 @@ async function searchUsers (userId, searchParameters, searchMyself = false, limi
   }
 
   if (
-    Object.hasOwn(searchParameters, 'birthday') && 
+    Object.hasOwn(searchParameters, 'birthday') &&
     !Number.isNaN(Number(searchParameters.birthday))
   ) {
     query += 'DAY(`user`.`birthday`) = ? AND '
@@ -235,7 +235,7 @@ async function searchUsers (userId, searchParameters, searchMyself = false, limi
   }
 
   if (
-    Object.hasOwn(searchParameters, 'onlyOnline') && 
+    Object.hasOwn(searchParameters, 'onlyOnline') &&
     !Object.hasOwn(searchParameters, 'withWebcam')
   ) {
     query += `(\`user\`.\`id\` IN (${global.clients.map(user => '?').join(',')}) AND \`user\`.\`public_status\` = 1) AND `
@@ -243,7 +243,7 @@ async function searchUsers (userId, searchParameters, searchMyself = false, limi
   }
 
   if (Object.hasOwn(searchParameters, 'withWebcam')) {
-    let filteredUsers = global.clients.filter((user) => user.features & 0x400)
+    const filteredUsers = global.clients.filter((user) => user.features & 0x400)
     query += `(\`user\`.\`id\` IN (${filteredUsers.map(user => '?').join(',')}) AND \`user\`.\`public_status\` = 1) AND `
     variables.push(...filteredUsers.map(user => user.userId))
   }
@@ -370,7 +370,8 @@ async function createOrCompleteContact (
     // eslint-disable-next-line no-unused-vars
     const [existingContactResult, _existingContactFields] =
       await connection.query(
-        'SELECT `contact`.`id` FROM `contact` WHERE ' +
+        'SELECT `contact`.`id`, `contact`.`is_auth_success`, ' +
+        '`contact`.`adder_user_id`, `contact`.`contact_user_id` FROM `contact` WHERE ' +
         '`contact`.`adder_user_id` = ? AND ' +
         '`contact`.`contact_user_id` = ?',
         [contactUserId, requesterUserId]
@@ -393,14 +394,15 @@ async function createOrCompleteContact (
       [contactNickname, contactFlags, groupId, existingContactId]
     )
 
-    result = { action: 'MODIFY_EXISTING', contactId: existingContactId }
+    result = { action: 'MODIFY_EXISTING', authSuccess: authQuery !== '', contactId: existingContactId }
   } catch (error) {
     // во бля попадос
     // не проблема, просто наоборот сделаем
     try {
       const [existingContactResult, _existingContactFields] =
       await connection.query(
-        'SELECT `contact`.`id` FROM `contact` WHERE ' +
+        'SELECT `contact`.`id`, `contact`.`is_auth_success`, ' +
+        '`contact`.`adder_user_id`, `contact`.`contact_user_id` FROM `contact` WHERE ' +
         '`contact`.`adder_user_id` = ? AND ' +
         '`contact`.`contact_user_id` = ?',
         [requesterUserId, contactUserId]
@@ -765,7 +767,7 @@ async function deleteContact (adderUserId, contactLogin, contactDomain) {
 
 /**
  * Редактировать статус пользователя
- * 
+ *
  * @deprecated Больше не используется в коде, и, вероятно всего, сломан
  *
  * @param {number} userId ID пользователя
@@ -1090,6 +1092,89 @@ async function getTelegramIdByVirtualNumber (virtualNumber) {
     : null
 }
 
+/**
+ * Изменение пользователя
+ *
+ * @param {Object} userData Параметры
+ */
+async function modifyUser (userData) {
+  const connection = await pool.getConnection()
+  let query = 'UPDATE `user` SET '
+  const variables = []
+
+  const userId = userData.userId
+
+  if (Object.hasOwn(userData, 'login')) {
+    query += '`user`.`login` = ?, '
+    variables.push(`${userData.login}`)
+  }
+
+  if (Object.hasOwn(userData, 'passwd')) {
+    query += '`user`.`passwd` = ?, '
+    variables.push(`${crypto.createHash('md5').update(userData.passwd).digest('hex').toLowerCase()}`)
+  }
+
+  if (Object.hasOwn(userData, 'domain')) {
+    query += '`user`.`domain` = ?, '
+    variables.push(`${userData.domain}`)
+  }
+
+  if (Object.hasOwn(userData, 'nick')) {
+    query += '`user`.`nick` = ?, '
+    variables.push(`${userData.nick}`)
+  }
+
+  if (Object.hasOwn(userData, 'f_name')) {
+    query += '`user`.`f_name` = ?, '
+    variables.push(`${userData.f_name}`)
+  }
+
+  if (Object.hasOwn(userData, 'l_name')) {
+    query += '`user`.`l_name` = ?, '
+    variables.push(`${userData.l_name}`)
+  }
+
+  if (Object.hasOwn(userData, 'location')) {
+    query += '`user`.`location` = ?, '
+    variables.push(`${userData.location}`)
+  }
+
+  if (Object.hasOwn(userData, 'birthday')) {
+    query += '`user`.`birthday` = ?, '
+    variables.push(`${userData.birthday}`)
+  }
+
+  if (Object.hasOwn(userData, 'sex')) {
+    query += '`user`.`sex` = ?, '
+    variables.push(Number(userData.sex))
+  }
+
+  if (Object.hasOwn(userData, 'avatar')) {
+    query += '`user`.`avatar` = ?, '
+    variables.push(`${userData.avatar}`)
+  }
+
+  if (Object.hasOwn(userData, 'public_status')) {
+    query += '`user`.`public_status` = ?, '
+    variables.push(Number(userData.public_status))
+  }
+
+  if (Object.hasOwn(userData, 'activated')) {
+    query += '`user`.`activated` = ?, '
+    variables.push(Number(userData.activated))
+  }
+
+  query = query.substring(0, query.length - 2)
+
+  query += ' WHERE `user`.`id` = ?'
+  variables.push(Number(userId))
+
+  // eslint-disable-next-line no-unused-vars
+  await connection.query(query, variables)
+
+  pool.releaseConnection(connection)
+}
+
 module.exports = {
   getUserIdViaCredentials,
   getContact,
@@ -1117,5 +1202,6 @@ module.exports = {
   getMicroblogSettings,
   insertNewMicroblog,
   getLastMicroblog,
-  getTelegramIdByVirtualNumber
+  getTelegramIdByVirtualNumber,
+  modifyUser
 }
