@@ -41,6 +41,7 @@ const obraz = {
   serverPort: 8081,
   serverHostname: '0.0.0.0',
   cdnPath: '', // путь на сервере до аватарок
+  gamesPath: '', // путь на сервере до папки с играми в .html и magent_list.txt
   openWeatherMapApiKey: 'diugjqoiuegjroiugjqoefgjqeoigfjqieo',
   mobilePromoRedirect: 'http://hpc.ru/'
 }

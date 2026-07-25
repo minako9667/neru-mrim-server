@@ -5,13 +5,17 @@
 
 // eslint-disable-next-line no-unused-vars
 const { Socket, createServer } = require('node:net')
+const fs = require('fs').promises
 const { processAvatar } = require('./processor')
 const { getUserAvatar } = require('../../database')
 const config = require('../../../config')
 const { query } = require('winston')
 const { generateXMLResponse } = require('./weather')
+const { parseGameParams } = require('./gameAuth')
 const { ServerConstructor } = require('../../constructors/server')
 
+const activeGameSessions = new Map()
+const GAMESESSION_TIMEOUT = 10 * 60 * 1000 // you have 5 minutes before you die
 const ALLOWED_METHODS = ['GET', 'HEAD']
 const STATUS_CODES = {
   200: 'OK',
@@ -158,6 +162,53 @@ function connectionListener (socket, connectionId, logger, variables) {
           </Body>
           </BalanceResponse>
           `, { 'Content-Type': 'text/xml' })
+      }
+
+      /* games list */
+      if (uripath === 'games/ru/magent_list') {
+        try {
+          const gamesList = await fs.readFile(`${config.obraz.gamesPath}magent_list.txt`)
+          return respond(version, 200, gamesList, { 'Content-Type': 'charset=utf-16be' })
+        } catch (err) {
+          logger.error(`[${connectionId}] [obraz] internal error, stack: ${err.message}`)
+          return respond(version, 500, 'Internal Server Error')
+        }
+      }
+
+      /* game logic */
+      if (uripath === 'game') {
+        const gameData = parseGameParams(queryValues.ident)
+        if (!gameData || !gameData.ident || !gameData.key || !gameData.player) {
+          return respond(version, 400, 'Bad Request')
+        }
+        const { ident, key, player, opponent } = gameData
+        if (key) {
+          const now = Date.now()
+
+          if (activeGameSessions.has(key)) {
+            const lastSeen = activeGameSessions.get(key)
+
+            if (now - lastSeen > GAMESESSION_TIMEOUT) {
+              activeGameSessions.delete(key)
+              logger.debug(`[${connectionId}] [obraz] time's up buddy, your ${key} game session is over.`)
+              return respond(version, 418, "I'm a teapot")
+            }
+          }
+          activeSessions.set(key, now)
+        }
+
+        try {
+          let htmlContent = await fs.readFile(`${config.obraz.gamesPath}${ident}.html`, 'utf-8')
+          // replacements for displaying basic info
+          htmlContent = htmlContent
+            .replace(/{{GAME_KEY}}/g, key || 'N/A')
+            .replace(/{{PLAYER}}/g, player || 'N/A')
+            .replace(/{{OPPONENT}}/g, opponent || 'N/A')
+          return respond(version, 200, htmlContent, { 'Content-Type': 'text/html' })
+        } catch (err) {
+          logger.error(`[${connectionId}] [obraz] internal error, stack: ${err.message}`)
+          return respond(version, 500, 'Internal Server Error')
+        }
       }
 
       // processing pfp by default
